@@ -3,116 +3,86 @@ import mediapipe as mp
 import csv
 import os
 
-# --- Configurações Iniciais ---
-# Inicializa o MediaPipe Hands
-mp_maos = mp.solutions.hands
-mp_desenho = mp.solutions.drawing_utils
-maos = mp_maos.Hands(
-    max_num_hands=1,  # Configurado para detectar apenas uma mão
+# Inicialização do MediaPipe e configurações
+mp_hands = mp.solutions.hands
+mp_draw = mp.solutions.drawing_utils
+hands = mp_hands.Hands(
+    max_num_hands=1,
     min_detection_confidence=0.7,
     min_tracking_confidence=0.5
 )
 
-# Nome do arquivo CSV para salvar os dados
-nome_arquivo_csv = 'alfabeto_libras.csv'
+csv_file = 'alfabeto_libras.csv'
+samples_per_letter = 200
 
-# Número de amostras a serem coletadas por letra
-num_amostras = 200
-
-# --- Preparação do Arquivo CSV ---
-# Cria o cabeçalho para o CSV
-cabecalho = ['letra']
+header = ['letra']
 for i in range(21):
-    cabecalho += [f'x{i}', f'y{i}', f'z{i}']
+    header += [f'x{i}', f'y{i}', f'z{i}']
 
-# Verifica se o arquivo já existe. Se não, cria e escreve o cabeçalho.
-if not os.path.exists(nome_arquivo_csv):
-    with open(nome_arquivo_csv, mode='w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(cabecalho)
-    print(f"Arquivo {nome_arquivo_csv} criado com cabeçalho.")
+if not os.path.exists(csv_file):
+    with open(csv_file, mode='w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+    print(f"Arquivo {csv_file} criado.")
 else:
-    print(f"Arquivo {nome_arquivo_csv} já existe. Novos dados serão adicionados ao final.")
+    print(f"Arquivo {csv_file} já existe. Novos dados serão adicionados.")
 
-# --- Captura de Vídeo e Coleta ---
-cap = cv2.VideoCapture(0)  # Inicia a webcam (pode ser 0 ou 1 dependendo do seu sistema)
+cap = cv2.VideoCapture(0)
 
 while cap.isOpened():
-    sucesso, imagem = cap.read()
-    if not sucesso:
+    ret, frame = cap.read()
+    if not ret:
         print("Não foi possível acessar a câmera.")
         break
 
-    # Inverte a imagem horizontalmente para um efeito de espelho
-    imagem = cv2.flip(imagem, 1)
+    frame = cv2.flip(frame, 1)
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    result = hands.process(rgb)
 
-    # Converte a imagem de BGR para RGB (MediaPipe usa RGB)
-    imagem_rgb = cv2.cvtColor(imagem, cv2.COLOR_BGR2RGB)
-
-    # Processa a imagem para detectar as mãos
-    resultados = maos.process(imagem_rgb)
-
-    # Desenha os pontos na mão se detectada
-    if resultados.multi_hand_landmarks:
-        for pontos_mao in resultados.multi_hand_landmarks:
-            mp_desenho.draw_landmarks(
-                imagem,
-                pontos_mao,
-                mp_maos.HAND_CONNECTIONS,
-                mp_desenho.DrawingSpec(color=(255, 0, 0), thickness=2, circle_radius=4),  # Pontos em azul
-                mp_desenho.DrawingSpec(color=(0, 255, 0), thickness=2)  # Conexões em verde
+    if result.multi_hand_landmarks:
+        for hand_landmarks in result.multi_hand_landmarks:
+            mp_draw.draw_landmarks(
+                frame,
+                hand_landmarks,
+                mp_hands.HAND_CONNECTIONS,
+                mp_draw.DrawingSpec(color=(255, 0, 0), thickness=2, circle_radius=4),
+                mp_draw.DrawingSpec(color=(0, 255, 0), thickness=2)
             )
 
-    # Exibe a imagem
-    cv2.imshow('Coleta de Dados - Alfabeto em Libras', imagem)
+    cv2.imshow('Coleta de Dados - Libras', frame)
+    key = cv2.waitKey(10) & 0xFF
 
-    # Aguarda uma tecla ser pressionada
-    tecla = cv2.waitKey(10) & 0xFF
-
-    # Se a tecla '0' for pressionada, sai do loop
-    if tecla == ord('0'):
+    if key == ord('0'):
         break
 
-    # Se a tecla for uma letra, inicia a coleta
-    if ord('a') <= tecla <= ord('z'):
-        letra_pressionada = chr(tecla)
-        print(f"--- Coletando dados para a letra '{letra_pressionada.upper()}' ---")
-        print("Mantenha a posição...")
-
-        # Loop para coletar o número definido de amostras
-        for i in range(num_amostras):
-            # Recaptura a imagem para ter dados "frescos" em cada amostra
-            sucesso_coleta, imagem_coleta = cap.read()
-            if not sucesso_coleta:
-                print("Falha ao capturar imagem durante a coleta.")
+    if ord('a') <= key <= ord('z'):
+        letra = chr(key)
+        print(f"Coletando dados para '{letra.upper()}'")
+        for i in range(samples_per_letter):
+            ret_sample, frame_sample = cap.read()
+            if not ret_sample:
+                print("Falha ao capturar imagem.")
                 continue
 
-            imagem_coleta = cv2.flip(imagem_coleta, 1)
-            imagem_coleta_rgb = cv2.cvtColor(imagem_coleta, cv2.COLOR_BGR2RGB)
-            resultados_coleta = maos.process(imagem_coleta_rgb)
+            frame_sample = cv2.flip(frame_sample, 1)
+            rgb_sample = cv2.cvtColor(frame_sample, cv2.COLOR_BGR2RGB)
+            result_sample = hands.process(rgb_sample)
 
-            if resultados_coleta.multi_hand_landmarks:
-                print("Mão detectada!")
-                for pontos_mao_coleta in resultados_coleta.multi_hand_landmarks:
-                    # Extrai as coordenadas e as achata em uma única lista
-                    pontos = [letra_pressionada]
-                    for marco in pontos_mao_coleta.landmark:
-                        pontos.extend([marco.x, marco.y, marco.z])
-
-                    # Salva a linha no arquivo CSV
-                    with open(nome_arquivo_csv, mode='a', newline='') as file:
-                        writer = csv.writer(file)
-                        writer.writerow(pontos)
-                    print("Linha salva no CSV.")
+            if result_sample.multi_hand_landmarks:
+                for hand_landmarks in result_sample.multi_hand_landmarks:
+                    row = [letra]
+                    for lm in hand_landmarks.landmark:
+                        row.extend([lm.x, lm.y, lm.z])
+                    with open(csv_file, mode='a', newline='') as f:
+                        writer = csv.writer(f)
+                        writer.writerow(row)
+                    print(f"Amostra {i+1}/{samples_per_letter} salva.")
             else:
-                print("Nenhuma mão detectada nesta amostra.")
+                print("Nenhuma mão detectada.")
 
-            # Mostra um feedback visual durante a coleta
-            texto_coletando = f"Coletando... {i + 1}/{num_amostras}"
-            cv2.putText(imagem, texto_coletando, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
-            cv2.imshow('Coleta de Dados - Alfabeto em Libras', imagem)
-            cv2.waitKey(1)  # Essencial para a janela do OpenCV atualizar
+            status = f"Coletando... {i + 1}/{samples_per_letter}"
+            cv2.putText(frame, status, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+            cv2.imshow('Coleta de Dados - Libras', frame)
+            cv2.waitKey(1)
 
-        print(f"--- Coleta para '{letra_pressionada.upper()}' finalizada! ---")
-
-# Libera a câmera e fecha as janelas
+        print(f"Coleta para '{letra.upper()}' finalizada.")
