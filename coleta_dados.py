@@ -30,6 +30,9 @@ if not os.path.exists(nome_arquivo_csv):
     with open(nome_arquivo_csv, mode='w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(cabecalho)
+    print(f"Arquivo {nome_arquivo_csv} criado com cabeçalho.")
+else:
+    print(f"Arquivo {nome_arquivo_csv} já existe. Novos dados serão adicionados ao final.")
 
 # --- Captura de Vídeo e Coleta ---
 cap = cv2.VideoCapture(0)  # Inicia a webcam (pode ser 0 ou 1 dependendo do seu sistema)
@@ -66,7 +69,7 @@ while cap.isOpened():
     # Aguarda uma tecla ser pressionada
     tecla = cv2.waitKey(10) & 0xFF
 
-    # Se a tecla 'q' for pressionada, sai do loop
+    # Se a tecla '0' for pressionada, sai do loop
     if tecla == ord('0'):
         break
 
@@ -81,6 +84,7 @@ while cap.isOpened():
             # Recaptura a imagem para ter dados "frescos" em cada amostra
             sucesso_coleta, imagem_coleta = cap.read()
             if not sucesso_coleta:
+                print("Falha ao capturar imagem durante a coleta.")
                 continue
 
             imagem_coleta = cv2.flip(imagem_coleta, 1)
@@ -88,6 +92,7 @@ while cap.isOpened():
             resultados_coleta = maos.process(imagem_coleta_rgb)
 
             if resultados_coleta.multi_hand_landmarks:
+                print("Mão detectada!")
                 for pontos_mao_coleta in resultados_coleta.multi_hand_landmarks:
                     # Extrai as coordenadas e as achata em uma única lista
                     pontos = [letra_pressionada]
@@ -98,6 +103,9 @@ while cap.isOpened():
                     with open(nome_arquivo_csv, mode='a', newline='') as file:
                         writer = csv.writer(file)
                         writer.writerow(pontos)
+                    print("Linha salva no CSV.")
+            else:
+                print("Nenhuma mão detectada nesta amostra.")
 
             # Mostra um feedback visual durante a coleta
             texto_coletando = f"Coletando... {i + 1}/{num_amostras}"
@@ -108,5 +116,3 @@ while cap.isOpened():
         print(f"--- Coleta para '{letra_pressionada.upper()}' finalizada! ---")
 
 # Libera a câmera e fecha as janelas
-cap.release()
-cv2.destroyAllWindows()
